@@ -140,7 +140,7 @@
 
         {#if starCntComp > 0}
           {#each {length: starCntComp} as _, i}
-            <img src={selectedStarComp} class="star" alt="Star" style="left: {239 - (18 * starCntComp) + (36 * i)}px;"/>
+            <img src={selectedStarComp} class="star" alt="Star" style="left: {239 - (19 * starCntComp) + (38 * i)}px;"/>
           {/each}
         {/if}
 
