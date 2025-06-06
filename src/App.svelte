@@ -1,55 +1,27 @@
 <script>
-  import Stars from './lib/StarSettings.svelte';
 
-  import Cropper from "svelte-easy-crop";
-	import { getCroppedImg, getMirroredImg } from "./lib/CanvasUtils.js"
+  import logo from '/pwlogo.png'
 
-  import logo       from '/pwlogo.png'
-  import cardboard  from './assets/empty.png'
-  import def        from './assets/shield.png'
-  import fire       from './assets/fire.png'
-  import health     from './assets/heart.png'
+  let stylesEta = [ '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', '10',
+     '11', '12', '13', '14', '15', '16', '17', '18' ]
 
-  let borders = [ 'SSS', 'SS', 'S', 'A', 'B', 'C', 'D', 'E' ]
+  let stylesDelta = [ '0', '1', '2' ]
+
+  let borders = [ 'Alpha', 'Beta', 'Delta', 'Eta', 'Epsilon', 'Gamma', 'Jota', 'Lambda', 'Theta', 'Zeta' ]
 
   let deres = [ 'Bodere', 'Dandere', 'Deredere', 'Kamidere', 'Kuudere', 'Mayadere',
     'Tsundere', 'Yandere', 'Raito', 'Yami', 'Yato' ]
 
-  let image = "https://sanakan.pl/i/ss/fga432a.png";
+  let image = "https://sanakan.pl/i/ss/sUwh3io.png";
   let customBorder = "";
   let showStats = false;
-  let editMode = false;
   let localImage = false;
-  let mirrorImage = false;
 
-  let starCntComp = 0;
-  let selectedStarComp;
-  let selectedBorder =  'C';
-  let selectedDere = 'Kamidere';
+  let selectedBorder = 'Delta';
+  let selectedDere = 'Mayadere';
+  let selectedStyle = '2'
 
-  let pixelCrop, profilePicture, style, borderColor, fileinput, minzoom, curzoom;
-
-  async function downloadImage() {
-    try {
-      const croppedImage = await getCroppedImg(image, pixelCrop);
-      const downloadLink = document.createElement("a");
-      downloadLink.href = croppedImage;
-      downloadLink.download = "skalpelek.png";
-      downloadLink.click();
-    } catch (error) {
-      alert("Nie udało się pobrać obrazka, spróbuj z innym lub użyj lokalnego pliku.");
-    }
-	}
-
-  async function toMirrorImage() {
-    try {
-      const croppedImage = await getMirroredImg(image);
-      image = croppedImage;
-      localImage = true;
-    } catch (error) {
-      alert("Nie udało się pobrać obrazka, spróbuj z innym lub użyj lokalnego pliku.");
-    }
-  }
+  let fileinput;
 
   function onFileSelected(e) {
   	let imageFile = e.target.files[0];
@@ -59,30 +31,104 @@
       localImage = true;
   	};
   	reader.readAsDataURL(imageFile);
-    editMode = false;
-    minzoom = 1;
-    curzoom = 1;
   }
 
-  function previewCrop(e) {
-		pixelCrop = e.detail.pixels;
-		const { x, y, width } = e.detail.pixels;
-		const scale = 448 / width;
+  function getStyleList() {
+    switch (selectedBorder) {
+      case 'Delta':
+        return stylesDelta;
+      case 'Eta':
+        return stylesEta;
+      default:
+        return null;
+    }
+  }
 
-    const hd = -y*scale;
-    const wd = -x*scale - 448 / 2;
-    const wdn = profilePicture.naturalWidth * scale;
+  let styles = getStyleList();
 
-    borderColor = (pixelCrop.width < 448 || pixelCrop.height < 650) ? "#ff6242" : "";
+  function getStyle() {
+    switch (selectedBorder) {
+      case 'Delta':
+        if (parseInt(selectedStyle) > 2)
+          selectedStyle = '0';
+      case 'Eta':
+        if (parseInt(selectedStyle) > 0)
+          return selectedStyle;
+      default:
+        return "";
+    }
+  }
 
-    const dratio = 448 / 650;
-    const nratio = profilePicture.naturalWidth / profilePicture.naturalHeight;
-    const mratio = dratio / nratio;
-    minzoom = mratio > 1 ? mratio : 1;
-    curzoom = curzoom < minzoom ? minzoom : curzoom;
+  function getBorder() {
+    switch (selectedBorder) {
+      case 'Beta':
+      case 'Epsilon':
+      case 'Gamma':
+      case 'Theta':
+        return "";
+      default:
+        return `/borders/${selectedBorder}/Border${styleUri}.png`;
+    }
+  }
 
-		profilePicture.style=`margin: ${hd}px 0 0 ${wd}px; width: ${wdn}px;`
-	}
+  function getBackBorder() {
+    switch (selectedBorder) {
+      case 'Jota':
+          return `/borders/${selectedBorder}/Border/${selectedDere}.png`;
+      case 'Delta':
+      case 'Eta':
+      case 'Lambda':
+        return `/borders/${selectedBorder}/BorderBack${styleUri}.png`;
+      default:
+        return "";
+    }
+  }
+
+  function getDere() {
+    switch (selectedBorder) {
+      case 'Beta':
+      case 'Epsilon':
+      case 'Gamma':
+      case 'Theta':
+        return `/borders/${selectedBorder}/Border/${selectedDere}.png`
+      default:
+        return `/borders/${selectedBorder}/Dere/${selectedDere}.png`;
+    }
+  }
+
+  function getStats() {
+    switch (selectedBorder) {
+      case 'Lambda':
+      case 'Zeta':
+        return "";
+      case 'Gamma':
+      case 'Jota':
+      case 'Theta':
+        return `/borders/${selectedBorder}/Stats/${selectedDere}.png`;
+      case 'Beta':
+      case 'Epsilon':
+        if (selectedDere === 'Yami' || selectedDere === 'Raito' || selectedDere === 'Yato')
+          return `/borders/${selectedBorder}/Stats/${selectedDere}.png`
+      default:
+        return `/borders/${selectedBorder}/Stats${styleUri}.png`;
+    }
+  }
+
+  let styleUri = getStyle();
+  let borderUri = getBorder();
+  let backBorderUri = getBackBorder();
+  let statsUri = getStats();
+  let dereUri = getDere();
+
+  function updateData() {
+    styles = getStyleList();
+    styleUri = getStyle();
+    borderUri = getBorder();
+    backBorderUri = getBackBorder();
+    statsUri = getStats();
+    dereUri = getDere();
+  }
+
 </script>
 
 <main>
@@ -91,17 +137,19 @@
   </div>
 
   <div class="selector">
-    <label><div class="stext">Ramka:</div> <select bind:value={selectedBorder} >
+    <label><div class="stext">Ramka:</div> <select bind:value={selectedBorder} on:change={() => updateData()} >
       {#each borders as value}<option {value}>{value}</option>{/each}
     </select></label>
 
-    <label><div class="stext">Dere:</div> <select class="nselect" bind:value={selectedDere} >
+    <label><div class="stext">Dere:</div> <select class="nselect" bind:value={selectedDere} on:change={() => updateData()} >
       {#each deres as value}<option {value}>{value}</option>{/each}
     </select></label>
-  </div>
 
-  <div class="selector">
-    <Stars bind:value={selectedStarComp} bind:count={starCntComp}/>
+    {#if styles}
+      <label><div class="stext">Styl:</div> <select class="nselect" bind:value={selectedStyle} on:change={() => updateData()} >
+        {#each styles as value}<option {value}>{value}</option>{/each}
+      </select></label>
+    {/if}
   </div>
 
   <div class="selector">
@@ -111,46 +159,29 @@
     {/if}
     <label><div class="ltext">Link do ramki:</div> <input bind:value={customBorder} /> </label><br/>
     <label><div class="ltext">Pokaż statystyki:</div> <input type="checkbox" bind:checked={showStats} /> </label><br/>
-    <label class="mirror"><div class="ltext">Odbicie lustrzane:</div> <input type="checkbox" bind:checked={mirrorImage} on:change={() => toMirrorImage()}/> </label><br/>
-    <label class="exp"><div class="ltext">Tryb edycji:</div> <input type="checkbox" bind:checked={editMode} on:change={() => borderColor = ""} /> </label><br/>
   </div>
-  <div class="looks" style="border-color: {borderColor};" >
-    <img src={cardboard} class="cardboard" alt="Cardboard" />
-    {#if editMode}
-      <div class="wrapper">
-        <img bind:this={profilePicture} src={image} class="wrapper_img" alt="Scalpel" style={style}/>
-      </div>
-      <div class="canva">
-        <Cropper {image} showGrid={false} crop={{x:0, y:0}} bind:zoom={curzoom} bind:minZoom={minzoom} maxZoom={5} zoomSpeed={0.05} cropSize={{width:448, height:650}} restrictPosition={true} on:cropcomplete={previewCrop} />
-      </div>
-    {:else}
-      <img src={image} class="scalp" alt="Scalpel" />
-    {/if}
+  <div class="looks">
+    <img src={image} class="scalp" alt="Scalpel" />
       {#if customBorder}
         <img src={customBorder} class="border" alt="Border" />
       {:else}
-        <img src="/borders/{selectedBorder}.png" class="border" alt="Border" />
-        <img src="/dere/{selectedDere}.png" class="stats" alt="Dere" />
-
-        {#if showStats}
-          <img src={def} class="stats" alt="Defense" />
-          <img src={fire} class="stats" alt="Attack" />
-          <img src={health} class="stats" alt="Health" />
+        {#if backBorderUri}
+          <img src="{backBorderUri}" class="back" alt="BorderBack" />
         {/if}
 
-        {#if starCntComp > 0}
-          {#each {length: starCntComp} as _, i}
-            <img src={selectedStarComp} class="star" alt="Star" style="left: {239 - (19 * starCntComp) + (38 * i)}px;"/>
-          {/each}
+        {#if borderUri}
+          <img src="{borderUri}"  class="border" alt="Border" />
         {/if}
 
+        {#if dereUri}
+          <img src="{dereUri}" class="dere" alt="Dere" />
+        {/if}
+
+        {#if showStats && statsUri}
+          <img src="{statsUri}" class="stats" alt="Stats" />
+        {/if}
       {/if}
   </div>
-  {#if editMode}
-  <div class="editor">
-    <button type="button" on:click={async () => {downloadImage()}}>Zapisz</button>
-  </div>
-  {/if}
 </main>
 
 <style>
@@ -174,54 +205,33 @@
     width: 475px;
     height: 667px;
   }
-  .canva {
-    position: absolute;
-    width: 448px;
-    height: 650px;
-    top: 13px;
-    left: 13px;
-    z-index: 0;
-  }
-  .cardboard {
-    position: absolute;
-    pointer-events: none;
-    top: 13px;
-    left: 13px;
-  }
-  .wrapper {
-    position: absolute;
-    top: 13px;
-    left: 13px;
-    width: 448px;
-    height: 650px;
-    overflow: hidden;
-    z-index: -1;
-  }
-  .editor {
-    padding: 0.5em;
-  }
-  .wrapper_img {
-    position: absolute;
-  }
   .scalp {
     position: absolute;
-    top: 13px;
-    left: 13px;
-    width: 448px;
+    top: 0px;
+    left: 0px;
+    width: 475px;
     height: auto;
     pointer-events: none;
-    clip-path: xywh(0 0 100% 650px);
+    clip-path: xywh(0 0 100% 667px);
   }
   .border {
     position: relative;
     pointer-events: none;
     z-index: 1;
   }
-  .star {
+  .dere {
     position: absolute;
     pointer-events: none;
-    z-index: 3;
-    top: 30px;
+    z-index: 2;
+    top: 0px;
+    left: 0px;
+  }
+  .back {
+    position: absolute;
+    pointer-events: none;
+    z-index: -1;
+    top: 0px;
+    left: 0px;
   }
   .stats {
     position: absolute;
