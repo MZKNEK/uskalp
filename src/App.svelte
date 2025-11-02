@@ -5,7 +5,7 @@
   let stylesEta = [ '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', '10',
      '11', '12', '13', '14', '15', '16', '17', '18' ]
 
-  let stylesDelta = [ '0', '1', '2' ]
+  let stylesDelta = [ '0', '1', '2', '3' ]
 
   let borders = [ 'Alpha', 'Beta', 'Delta', 'Eta', 'Epsilon', 'Gamma', 'Jota', 'Lambda', 'Theta', 'Zeta' ]
 
@@ -49,7 +49,7 @@
   function getStyle() {
     switch (selectedBorder) {
       case 'Delta':
-        if (parseInt(selectedStyle) > 2)
+        if (parseInt(selectedStyle) > 3)
           selectedStyle = '0';
       case 'Eta':
         if (parseInt(selectedStyle) > 0)
@@ -231,7 +231,6 @@
     pointer-events: none;
     z-index: -1;
     top: 0px;
-    left: 0px;
   }
   .stats {
     position: absolute;
