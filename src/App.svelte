@@ -4,6 +4,7 @@
   import logo from '/pwlogo.png'
   import { getCroppedImg } from './lib/CanvasUtils.js';
 
+
   let borders = [ 'Alpha', 'Beta', 'Gamma', 'Delta', 'Epsilon', 'Zeta', 'Eta', 'Theta', 'Jota', 'Lambda', 'Omega' ]
   let deres = [ 'Bodere', 'Dandere', 'Deredere', 'Kamidere', 'Kuudere', 'Mayadere', 'Tsundere', 'Yandere', 'Raito', 'Yami', 'Yato' ]
   let variantsMap = {};
@@ -21,7 +22,34 @@
 
   let extraImage = null;
   let activeLayer = 'base';
+
+  let bgModel = 'small';
+  let bgRemoving = false;
+  let bgProgress = 0;
+  let bgProgressLabel = '';
+  let bgAutoLayer = false;
+
   
+  async function syncLayers() {
+    if (activeLayer === 'extra' || activeLayer === 'both') {
+      // top jest dowodzący -> kopiuj top na scalp
+      crop = { x: extraCrop.x, y: extraCrop.y };
+      curzoom = extraZoom;
+      await tick();
+      curzoom = curzoom + 0.000001;
+      await tick();
+      curzoom = curzoom - 0.000001;
+    } else {
+      // scalp jest dowodzący -> kopiuj scalp na top
+      extraCrop = { x: crop.x, y: crop.y };
+      extraZoom = curzoom;
+      await tick();
+      extraZoom = extraZoom + 0.000001;
+      await tick();
+      extraZoom = extraZoom - 0.000001;
+    }
+  }
+
   async function moveCrop(dx, dy) {
     if (activeLayer === 'base' || activeLayer === 'both') {
       crop.x = Math.round(crop.x) + dx;
@@ -157,6 +185,7 @@
     reader.onload = e => {
       extraImage = e.target.result;
       activeLayer = 'extra';
+      bgAutoLayer = false;
       extraZoom = 1;
     };
     reader.readAsDataURL(file);
@@ -336,6 +365,41 @@
     }
   }
 
+  async function removeBg() {
+    if (!image || bgRemoving) return;
+    bgRemoving = true;
+    bgProgress = 0;
+    bgProgressLabel = 'Inicjalizacja...';
+    try {
+      const imglyModule = await import('@imgly/background-removal');
+      const removeBackground = imglyModule.default ?? imglyModule.removeBackground ?? imglyModule;
+      const blob = await removeBackground(image, {
+        model: bgModel,
+        progress: (key, current, total) => {
+          if (total > 0) {
+            bgProgress = Math.round((current / total) * 100);
+            bgProgressLabel = key.includes('fetch') ? 'Pobieranie modelu...' : 'Przetwarzanie...';
+          }
+        }
+      });
+      const url = URL.createObjectURL(blob);
+      extraImage = url;
+      activeLayer = 'both';
+      bgAutoLayer = true;
+      bgProgressLabel = 'Gotowe!';
+    } catch (e) {
+      console.error('removeBg error:', e);
+      bgProgressLabel = 'Błąd: ' + (e?.message || 'sprawdź konsolę');
+      bgRemoving = false;
+      bgProgress = 0;
+    } finally {
+      if (bgRemoving) {
+        bgRemoving = false;
+        bgProgress = 0;
+      }
+    }
+  }
+
   async function downloadImage() {
     try {
       const canvas = document.createElement('canvas');
@@ -343,7 +407,8 @@
       canvas.height = 667;
       const ctx = canvas.getContext('2d');
 
-      // 1. Rysujemy SCALP (zawsze)
+      // Kolejność warstw: gdy bgAutoLayer (removeBg), scalp jest nad top
+      // Normalnie: top jest nad scalp
       let mainImagePart;
       if (editMode) {
         mainImagePart = await getCroppedImg(image, pixelCrop, currentMaskUrl);
@@ -351,13 +416,21 @@
         mainImagePart = image;
       }
       const imgMain = await loadImg(mainImagePart);
-      ctx.drawImage(imgMain, 0, 0);
 
-      // 2. Rysujemy top (jeśli istnieje)
       if (hasExtraLayer && extraImage) {
         const croppedExtra = await getCroppedImg(extraImage, extraPixelCrop, extraMaskUrl);
         const imgExtra = await loadImg(croppedExtra);
-        ctx.drawImage(imgExtra, 0, 0);
+        if (bgAutoLayer) {
+          // removeBg: najpierw top (wycięta postać), potem scalp (oryginał z maską) na wierzchu
+          ctx.drawImage(imgExtra, 0, 0);
+          ctx.drawImage(imgMain, 0, 0);
+        } else {
+          // normalnie: scalp, potem top
+          ctx.drawImage(imgMain, 0, 0);
+          ctx.drawImage(imgExtra, 0, 0);
+        }
+      } else {
+        ctx.drawImage(imgMain, 0, 0);
       }
 
       // Finalizacja pobierania
@@ -455,6 +528,33 @@
           </div>
       </div>
 
+      {#if editMode && hasExtraLayer}
+      <div class="form-container">
+        <div class="link-row">
+          <div class="ltext">Usuń tło (scalp):</div>
+          <select bind:value={bgModel} disabled={bgRemoving}>
+            <option value="small">Szybki (~40 MB)</option>
+            <option value="medium">Dokładny (~80 MB)</option>
+          </select>
+        </div>
+        <div class="link-row btn-row">
+          <button class="btn" style="background: #7c3aed;" on:click={removeBg} disabled={bgRemoving}>
+            {bgRemoving ? bgProgressLabel : 'Usuń tło'}
+          </button>
+        </div>
+        {#if bgRemoving}
+          <div class="bg-progress">
+            <div class="bg-progress-bar" style="width: {bgProgress}%"></div>
+          </div>
+        {/if}
+        {#if !bgRemoving && bgProgressLabel}
+          <div class="bg-status" style="{bgProgressLabel.startsWith('Błąd') ? 'color:#f87171;' : 'color:#22c55e;'}">
+            {bgProgressLabel.startsWith('Błąd') ? '✗ ' : '✓ '}{bgProgressLabel}
+          </div>
+        {/if}
+      </div>
+      {/if}
+
       <div class="form-container">
         <div class="link-row btn-row">
           <button class="btn" on:click={() => zoomLevel = zoomLevel === 1 ? 2 : 1}>
@@ -479,12 +579,22 @@
                 <button class="btn btn-small" style="background: #555;" on:click={resetZoom}>
                   Reset
                 </button>
+                {#if bgAutoLayer}
+                  <button class="btn btn-small" style="background: #2563eb;" on:click={syncLayers}>
+                    Sync
+                  </button>
+                {/if}
               </div>
             {:else}
               <div class="link-row btn-row">
                 <button class="btn btn-small" style="background: #555;" on:click={resetZoom}>
                   Reset
                 </button>
+                {#if bgAutoLayer}
+                  <button class="btn btn-small" style="background: #2563eb;" on:click={syncLayers}>
+                    Sync
+                  </button>
+                {/if}
               </div>
             {/if}
           {:else}
@@ -492,6 +602,11 @@
               <button class="btn btn-small" style="background: #555;" on:click={resetZoom}>
                 Reset
               </button>
+              {#if bgAutoLayer}
+                <button class="btn btn-small" style="background: #2563eb;" on:click={syncLayers}>
+                  Sync
+                </button>
+              {/if}
             </div>
           {/if}
           <div class="floating-panel">
@@ -543,6 +658,7 @@
           {/if}
           
           {#if editMode}
+            <div class="green-bg" style="-webkit-mask-image: url({currentMaskUrl}); mask-image: url({currentMaskUrl}); -webkit-mask-size: 100% 100%; mask-size: 100% 100%; -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat;"></div>
             <div class="cropper-container" 
                 style="--mask-url: url({currentMaskUrl}); pointer-events: {activeLayer === 'extra' ? 'none' : 'auto'};">
               <Cropper 
@@ -633,6 +749,29 @@
 
   .stext {
     font-weight: bold;
+  }
+
+  .bg-progress {
+    width: 100%;
+    height: 6px;
+    background: rgba(128,128,128,0.2);
+    border-radius: 3px;
+    margin-top: 6px;
+    overflow: hidden;
+  }
+
+  .bg-progress-bar {
+    height: 100%;
+    background: #7c3aed;
+    border-radius: 3px;
+    transition: width 0.3s ease;
+  }
+
+  .bg-status {
+    font-size: 0.8em;
+    color: #22c55e;
+    text-align: center;
+    margin-top: 4px;
   }
 
   .form-container {
@@ -782,6 +921,17 @@
     border: none !important;
     box-shadow: none !important;
     color: transparent !important;
+  }
+  
+  .green-bg {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 475px;
+    height: 667px;
+    background: #00ff00;
+    z-index: 15;
+    pointer-events: none;
   }
 
   .crop-border {
