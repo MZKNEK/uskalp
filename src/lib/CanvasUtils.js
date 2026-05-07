@@ -85,28 +85,30 @@ export async function getCroppedImg(imageSrc, pixelCrop, maskSrc = null) {
 
   // Krok 1: wytnij kadr w naturalnej rozdzielczości (bez skalowania)
   const cropCanvas = document.createElement('canvas');
-  cropCanvas.width = pixelCrop.width;
-  cropCanvas.height = pixelCrop.height;
+  cropCanvas.width = Math.round(pixelCrop.width);
+  cropCanvas.height = Math.round(pixelCrop.height);
   const cropCtx = cropCanvas.getContext('2d');
   setHighQualitySmoothing(cropCtx);
   cropCtx.drawImage(
     image,
-    pixelCrop.x, pixelCrop.y, pixelCrop.width, pixelCrop.height,
-    0, 0, pixelCrop.width, pixelCrop.height
+    Math.round(pixelCrop.x), Math.round(pixelCrop.y), Math.round(pixelCrop.width), Math.round(pixelCrop.height),
+    0, 0, Math.round(pixelCrop.width), Math.round(pixelCrop.height)
   );
 
-  // Krok 2: skaluj do 475x667 przez pica (Lanczos + lekkie wyostrzenie)
+  // Krok 2: skaluj do 475x667 (Lanczos bez wyostrzania, lub kopia 1:1)
   const targetCanvas = document.createElement('canvas');
   targetCanvas.width = 475;
   targetCanvas.height = 667;
-  await picaResizer.resize(cropCanvas, targetCanvas, {
-    quality: 3,
-    alpha: true,
-    unsharpAmount: 60,
-    unsharpRadius: 0.6,
-    unsharpThreshold: 0,
-  });
-
+  if (cropCanvas.width === 475 && cropCanvas.height === 667) {
+    const targetCtx = targetCanvas.getContext('2d');
+    targetCtx.drawImage(cropCanvas, 0, 0);
+  }
+  else {
+    await picaResizer.resize(cropCanvas, targetCanvas, {
+      quality: 3,
+      alpha: true,
+    });
+  }
   // Krok 3: nałóż maskę (jeśli jest)
   if (maskSrc) {
     const ctx = targetCanvas.getContext('2d');

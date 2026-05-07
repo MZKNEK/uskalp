@@ -877,6 +877,7 @@
     background-color: transparent;
     transform-origin: top left;
     flex-shrink: 0;
+    overflow: hidden;
   }
 
   .looks img {
@@ -884,7 +885,7 @@
     top: 0;
     left: 0;
     width: 475px;
-    height: 667px;
+    height: auto;
     pointer-events: none;
     display: block;
     image-rendering: pixelated;
