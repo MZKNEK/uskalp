@@ -2,6 +2,10 @@
   import { onMount, tick } from 'svelte';
   import Cropper from "svelte-easy-crop";
   import { getCroppedImg, cropOnScreen } from './lib/CanvasUtils.js';
+  import Segmented from './lib/Segmented.svelte';
+  import Switch from './lib/Switch.svelte';
+  import DropZone from './lib/DropZone.svelte';
+  import CardDrop from './lib/CardDrop.svelte';
 
 
   let borders = [ 'Alpha', 'Beta', 'Gamma', 'Delta', 'Epsilon', 'Zeta', 'Eta', 'Theta', 'Jota', 'Lambda', 'Omega' ]
@@ -40,10 +44,19 @@
   // extra sharpening; without it the scaling keeps the picture as it is
   let sharpen = 0;
   const sharpenLevels = [
-    { value: 0, label: 'Brak (wierne skalowanie)' },
+    { value: 0, label: 'Brak', title: 'Wierne skalowanie, bez wyostrzania' },
     { value: 0.3, label: 'Lekkie' },
-    { value: 0.6, label: 'Średnie (jak dawniej)' },
+    { value: 0.6, label: 'Średnie', title: 'Jak dawniej' },
     { value: 1, label: 'Mocne' },
+  ];
+  const bgModels = [
+    { value: 'small', label: 'Szybki (~40 MB)' },
+    { value: 'medium', label: 'Dokładny (~80 MB)' },
+  ];
+  const layers = [
+    { value: 'extra', label: 'Top' },
+    { value: 'base', label: 'Scalp' },
+    { value: 'both', label: 'Obie' },
   ];
 
   // Real preview: the croppers show the pictures as the browser scales them, so
@@ -140,6 +153,9 @@
   let zoomLevel = (typeof window !== 'undefined' && window.innerWidth < 900) ? 2 : 1;
 
   $: finalScale = (1 / dpr) * zoomLevel;
+  // but never wider than the screen, less its side margins
+  let winWidth = typeof window !== 'undefined' ? window.innerWidth : 1280;
+  $: shownScale = Math.min(finalScale, (winWidth - 32) / 475);
 
   onMount(() => {
     calculateScaling();
@@ -201,7 +217,8 @@
   let image = "https://sanakan.pl/i/ss/sUwh3io.png";
   let isLocalFile = false;
   let showStats = false;
-  let dragOver = false;
+  let fileName = '';
+  let extraFileName = '';
 
   let selectedBorder = 'Delta';
   let selectedDere = 'Mayadere';
@@ -209,9 +226,6 @@
   $: styles = Object.keys(variantsMap).length ? getStyleList() : [];
   
   let wrapperRef;
-  let fileinput;
-  let extraFileinput;
-  let dragOverExtra = false;
 
   function previewCrop(e) {
     pixelCrop = e.detail.pixels;
@@ -260,50 +274,16 @@
     image = "https://sanakan.pl/i/ss/sUwh3io.png";
   }
 
-  function onFileSelected(e) {
+  // a file from the drop zone or dropped onto the card
+  function onFile(e) {
+    fileName = e.detail.name;
     isLocalFile = true;
-    processFile(e.target.files[0]);
+    processFile(e.detail);
   }
 
-  function onDragOver(e) {
-    e.preventDefault();
-    dragOver = true;
-  }
-
-  function onDragLeave() {
-    dragOver = false;
-  }
-
-  function onDrop(e) {
-    e.preventDefault();
-    dragOver = false;
-    const imageFile = e.dataTransfer.files[0];
-    if (!imageFile) return;
-    const dt = new DataTransfer();
-    dt.items.add(imageFile);
-    fileinput.files = dt.files;
-    isLocalFile = true;
-    processFile(imageFile);
-  }
-
-  function onExtraDragOver(e) {
-    e.preventDefault();
-    dragOverExtra = true;
-  }
-
-  function onExtraDragLeave() {
-    dragOverExtra = false;
-  }
-
-  function onExtraDrop(e) {
-    e.preventDefault();
-    dragOverExtra = false;
-    const file = e.dataTransfer.files[0];
-    if (!file) return;
-    const dt = new DataTransfer();
-    dt.items.add(file);
-    extraFileinput.files = dt.files;
-    processExtraFile(file);
+  function onExtraFile(e) {
+    extraFileName = e.detail.name;
+    processExtraFile(e.detail);
   }
 
   function getStyle() {
@@ -522,6 +502,8 @@
   }
 
 </script>
+<svelte:window bind:innerWidth={winWidth} />
+
 <header class="page-head">
   <div class="page-top">
     <a class="back hud-corners" href="https://sanakan.pl/" title="Strona główna">&larr; Sanakan</a>
@@ -531,185 +513,93 @@
 </header>
 
 <main class="content">
-
   <div class="app-layout">
-    
-    <div class="left-panel">
-
-      <div class="selector">
-        <label><div class="stext">Ramka:</div> 
-          <select bind:value={selectedBorder}>
-            {#each borders as value}<option {value}>{value}</option>{/each}
-          </select>
-        </label>
-
-        <label><div class="stext">Dere:</div> 
-          <select class="nselect" bind:value={selectedDere}>
-            {#each deres as value}<option {value}>{value}</option>{/each}
-          </select>
-        </label>
-
+    <div class="panel">
+      <section class="group">
+        <h2 class="group-title"><i>01</i>Karta</h2>
+        <div class="field top"><span class="label">Ramka</span><Segmented bind:value={selectedBorder} options={borders} label="Ramka" words /></div>
+        <label class="field"><span class="label">Dere</span><select bind:value={selectedDere}>
+          {#each deres as value}<option {value}>{value}</option>{/each}
+        </select></label>
         {#if styles}
-          <label><div class="stext">Styl:</div> 
-            <select class="nselect" bind:value={selectedStyle}>
-              {#each styles as value}<option {value}>{value}</option>{/each}
-            </select>
-          </label>
+          <div class="field top"><span class="label">Styl</span><Segmented bind:value={selectedStyle} options={styles} label="Styl ramki" /></div>
         {/if}
-      </div>
+        <Switch label="Pokaż statystyki" bind:checked={showStats} />
+      </section>
 
-      <div class="form-container">
-        <div class="link-row">
-          <div class="ltext">Lokalny plik:</div>
-          <div class="dropzone {dragOver ? 'drag-over' : ''}"
-            on:dragover={onDragOver} on:dragleave={onDragLeave} on:drop={onDrop}>
-            <input type="file" class="file-input" accept=".jpg, .jpeg, .png, .webp" 
-              on:change={onFileSelected} bind:this={fileinput} />
-          </div>
-        </div>
-        {#if editMode && hasExtraLayer}
-        <div class="link-row">
-          <div class="ltext">Warstwa top:</div>
-          <div class="dropzone {dragOverExtra ? 'drag-over' : ''}"
-            on:dragover={onExtraDragOver} on:dragleave={onExtraDragLeave} on:drop={onExtraDrop}>
-            <input type="file" class="file-input" accept=".jpg, .jpeg, .png, .webp"
-              on:change={(e) => processExtraFile(e.target.files[0])} bind:this={extraFileinput} />
-          </div>
-        </div>
-        {/if}
+      <section class="group">
+        <h2 class="group-title"><i>02</i>Obraz</h2>
+        <DropZone bind:fileName on:file={onFile} accept=".jpg, .jpeg, .png, .webp" />
         {#if !isLocalFile}
-        <div class="link-row">
-          <div class="ltext">Link do obrazka:</div>
-          <input bind:value={image} placeholder="Wklej link do obrazka..." />
-        </div>
+          <label class="field"><span class="label">Link do obrazka</span><input bind:value={image} placeholder="Wklej link do obrazka..." /></label>
         {/if}
+      </section>
 
-        <div class="link-row checkbox-row">
-          <div class="ltext">Pokaż statystyki:</div>
-          <input type="checkbox" bind:checked={showStats} />
-        </div>
-          <div class="link-row checkbox-row">
-            <div class="ltext">Tryb edycji:</div>
-            <input type="checkbox" bind:checked={editMode} />
-          </div>
+      <section class="group">
+        <h2 class="group-title"><i>03</i>Edycja</h2>
+        <Switch label="Tryb edycji" bind:checked={editMode} />
         {#if editMode}
-          <div class="link-row">
-            <div class="ltext">Wyostrzenie:</div>
-            <select bind:value={sharpen}>
-              {#each sharpenLevels as level}<option value={level.value}>{level.label}</option>{/each}
-            </select>
-          </div>
-          <div class="link-row checkbox-row" title="Po puszczeniu kadru pokazuje go przeskalowanego dokładnie tak, jak w zapisanym pliku">
-            <div class="ltext">Podgląd wyniku:</div>
-            <input type="checkbox" bind:checked={realPreview} />
-          </div>
-        {/if}
-      </div>
+          <div class="field"><span class="label">Wyostrzenie</span><Segmented bind:value={sharpen} options={sharpenLevels} label="Wyostrzenie" words /></div>
+          <Switch label="Podgląd wyniku" bind:checked={realPreview}
+            title="Po puszczeniu kadru pokazuje go przeskalowanego dokładnie tak, jak w zapisanym pliku" />
 
-      {#if editMode && hasExtraLayer}
-      <div class="form-container">
-        <div class="link-row">
-          <div class="ltext">Usuń tło (scalp):</div>
-          <select bind:value={bgModel} disabled={bgRemoving}>
-            <option value="small">Szybki (~40 MB)</option>
-            <option value="medium">Dokładny (~80 MB)</option>
-          </select>
-        </div>
-        <div class="link-row btn-row">
-          <button class="btn btn-ai" on:click={removeBg} disabled={bgRemoving}>
-            {bgRemoving ? bgProgressLabel : 'Usuń tło'}
-          </button>
-        </div>
-        {#if bgRemoving}
-          <div class="bg-progress">
-            <div class="bg-progress-bar" style="width: {bgProgress}%"></div>
-          </div>
-        {/if}
-        {#if !bgRemoving && bgProgressLabel}
-          <div class="bg-status" class:bad={bgProgressLabel.startsWith('Błąd')}>
-            {bgProgressLabel.startsWith('Błąd') ? '✗ ' : '✓ '}{bgProgressLabel}
-          </div>
-        {/if}
-      </div>
-      {/if}
-
-      <div class="form-container">
-        <div class="link-row btn-row">
-          <button class="btn" on:click={() => zoomLevel = zoomLevel === 1 ? 2 : 1}>
-            Skala: {zoomLevel * 100}%
-          </button>
-          {#if editMode}
-            <button class="btn btn-go" on:click={downloadImage}>
-              Pobierz obrazek
-            </button>
-          {/if}
-        </div>
-        {#if editMode}
           {#if hasExtraLayer}
-            {#if extraImage}
-              <div class="link-row centered-row">
-                <div class="ltext">Wybierz warstwę:</div>
-                <select bind:value={activeLayer}>
-                  <option value="extra">Top</option>
-                  <option value="base">Scalp</option>
-                  <option value="both">Obie</option>
-                </select>
-                <button class="btn btn-small btn-muted" on:click={resetZoom}>
-                  Reset
+            <DropZone compact title="Warstwa top" hint="obraz nad ramką: przeciągnij albo kliknij" accept=".jpg, .jpeg, .png, .webp"
+              bind:fileName={extraFileName} on:file={onExtraFile} />
+            <div class="field"><span class="label">Usuń tło</span><Segmented bind:value={bgModel} options={bgModels} label="Model usuwania tła" words disabled={bgRemoving} /></div>
+            <div class="field"><span class="label"></span>
+              <div class="bg-tools">
+                <button type="button" class="btn-ai" on:click={removeBg} disabled={bgRemoving}>
+                  {bgRemoving ? bgProgressLabel : 'Usuń tło ze scalpa'}
                 </button>
-                {#if bgAutoLayer}
-                  <button class="btn btn-small btn-sync" on:click={syncLayers}>
-                    Sync
-                  </button>
+                {#if bgRemoving}
+                  <div class="bg-progress"><div class="bg-progress-bar" style="width: {bgProgress}%"></div></div>
+                {/if}
+                {#if !bgRemoving && bgProgressLabel}
+                  <div class="bg-status" class:bad={bgProgressLabel.startsWith('Błąd')}>
+                    {bgProgressLabel.startsWith('Błąd') ? '✗ ' : '✓ '}{bgProgressLabel}
+                  </div>
                 {/if}
               </div>
-            {:else}
-              <div class="link-row btn-row">
-                <button class="btn btn-small btn-muted" on:click={resetZoom}>
-                  Reset
-                </button>
-                {#if bgAutoLayer}
-                  <button class="btn btn-small btn-sync" on:click={syncLayers}>
-                    Sync
-                  </button>
-                {/if}
-              </div>
-            {/if}
-          {:else}
-            <div class="link-row btn-row">
-              <button class="btn btn-small btn-muted" on:click={resetZoom}>
-                Reset
-              </button>
-              {#if bgAutoLayer}
-                <button class="btn btn-small btn-sync" on:click={syncLayers}>
-                  Sync
-                </button>
-              {/if}
             </div>
-          {/if}
-          <div class="floating-panel">
-            <div class="info-label">SCALP
-              X: {Math.round(crop.x)} | Y: {Math.round(crop.y)} {Math.round(pixelCrop.width)}x{Math.round(pixelCrop.height)}</div>
-            {#if hasExtraLayer && extraImage}
-              <div class="info-label">TOP
-                X: {Math.round(extraCrop.x)} | Y: {Math.round(extraCrop.y)} {Math.round(extraPixelCrop.width)}x{Math.round(extraPixelCrop.height)}</div>
+            {#if extraImage}
+              <div class="field"><span class="label">Przesuwasz</span><Segmented bind:value={activeLayer} options={layers} label="Warstwa do przesuwania" words /></div>
             {/if}
-            <div class="dpad">
-              <button on:click={() => moveCrop(0, -1)}>▲</button>
-              <button on:click={() => moveCrop(0, 1)}>▼</button>
-              <button on:click={() => moveCrop(-1, 0)}>◀</button>
-              <button on:click={() => moveCrop(1, 0)}>▶</button>
+          {/if}
+
+          <div class="field top"><span class="label">Położenie</span>
+            <div class="nudge">
+              <div class="dpad">
+                <button type="button" class="up" title="W górę" on:click={() => moveCrop(0, -1)}>▲</button>
+                <button type="button" class="left" title="W lewo" on:click={() => moveCrop(-1, 0)}>◀</button>
+                <button type="button" class="down" title="W dół" on:click={() => moveCrop(0, 1)}>▼</button>
+                <button type="button" class="right" title="W prawo" on:click={() => moveCrop(1, 0)}>▶</button>
+              </div>
+              <div class="nudge-side">
+                <div class="info-label">SCALP X {Math.round(crop.x)} · Y {Math.round(crop.y)} · {Math.round(pixelCrop.width)}×{Math.round(pixelCrop.height)}</div>
+                {#if hasExtraLayer && extraImage}
+                  <div class="info-label">TOP&nbsp;&nbsp; X {Math.round(extraCrop.x)} · Y {Math.round(extraCrop.y)} · {Math.round(extraPixelCrop.width)}×{Math.round(extraPixelCrop.height)}</div>
+                {/if}
+                <div class="hint">Strzałki na klawiaturze też działają, z Shift po 10 px.</div>
+                <div class="nudge-actions">
+                  <button type="button" class="btn-muted" on:click={resetZoom}>Reset</button>
+                  {#if bgAutoLayer}
+                    <button type="button" class="btn-sync" on:click={syncLayers}>Sync</button>
+                  {/if}
+                </div>
+              </div>
             </div>
           </div>
         {/if}
-      </div>
+      </section>
     </div>
 
-  <div class="right-panel">
-    <div class="scale-wrapper" bind:this={wrapperRef} style="width: {475 * finalScale}px; height: {667 * finalScale}px;">
-      <div class="looks {editMode ? 'is-editing' : ''}" style="transform: scale({finalScale});">
+    <div class="card-col">
+      <CardDrop on:file={onFile}>
+    <div class="scale-wrapper" bind:this={wrapperRef} style="width: {475 * shownScale}px; height: {667 * shownScale}px;">
+      <div class="looks {editMode ? 'is-editing' : ''}" style="transform: scale({shownScale});">
         {#if editMode && hasExtraLayer && extraImage}
-          <div class="cropper-container top" bind:this={extraCropEl}
+          <div class="cropper-container top" class:under-real={realPreview && extraPreview && !previewStale} bind:this={extraCropEl}
               style="--mask-url: url({extraMaskUrl}); pointer-events: {activeLayer === 'base' ? 'none' : 'auto'};">
             <Cropper 
               showGrid={false}
@@ -740,7 +630,7 @@
           
           {#if editMode}
             <div class="green-bg" style="-webkit-mask-image: url({currentMaskUrl}); mask-image: url({currentMaskUrl}); -webkit-mask-size: 100% 100%; mask-size: 100% 100%; -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat;"></div>
-            <div class="cropper-container" bind:this={baseCropEl}
+            <div class="cropper-container" class:under-real={realPreview && basePreview && !previewStale} bind:this={baseCropEl}
                 style="--mask-url: url({currentMaskUrl}); pointer-events: {activeLayer === 'extra' ? 'none' : 'auto'};">
               <Cropper 
                 showGrid={false}
@@ -781,48 +671,26 @@
           
       </div>
     </div>
+      </CardDrop>
+      <div class="card-actions">
+        <button type="button" on:click={() => zoomLevel = zoomLevel === 1 ? 2 : 1}>Skala: {zoomLevel * 100}%</button>
+        {#if editMode}
+          <button type="button" class="btn-go" on:click={downloadImage}>Pobierz obrazek</button>
+        {/if}
+      </div>
+    </div>
   </div>
-  </div>
-
 </main>
 
 <footer class="site-foot"><span>&copy; 2017&ndash;{year} Sniku</span><i aria-hidden="true">&middot;</i><a href="https://sanakan.pl/privacy/">Prywatność</a></footer>
 
 <style>
-  .app-layout {
+  /* removing the background: the button, then its progress or result */
+  .bg-tools {
     display: flex;
     flex-direction: column;
-    align-items: center;
-    width: 100%;
-    gap: 15px;
-  }
-
-  .left-panel, .right-panel {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-  }
-
-  .selector {
-    display: flex;
-    flex-direction: row;
-    flex-wrap: wrap;
-    justify-content: center;
-    gap: 10px;
-    margin-bottom: 20px;
-	width: 100%;
-  }
-  
-  .selector label {
-    display: flex;
-    align-items: center;
-    gap: 5px;
-    white-space: nowrap;
-  }
-
-  .stext {
-    font-weight: bold;
-    color: #efe2f7;
+    align-items: flex-start;
+    gap: 6px;
   }
 
   /* the loading bar of the Safeguard scanner */
@@ -830,7 +698,6 @@
     width: 100%;
     height: 6px;
     background: rgba(155, 89, 182, 0.15);
-    margin-top: 6px;
     overflow: hidden;
   }
 
@@ -842,97 +709,74 @@
   }
 
   .bg-status {
-    margin-top: 4px;
     font: 12px "Share Tech Mono", monospace;
     letter-spacing: 0.1em;
     color: var(--ok);
-    text-align: center;
   }
 
   .bg-status.bad {
     color: var(--bad);
   }
 
-  .form-container {
-    width: 100%;
-    max-width: 500px;
-    margin: 0 auto;
-  }
-
-  .link-row {
+  /* moving the crop pixel by pixel: arrows laid out as on a keyboard, the
+     position beside them */
+  .nudge {
     display: flex;
-    flex-direction: row;
-    align-items: center;
-    margin-bottom: 12px;
-    gap: 10px;
+    align-items: flex-start;
+    gap: 16px;
   }
 
-  .ltext {
-    flex: 0 0 130px;
-    text-align: right;
-    font-size: 0.95em;
+  .dpad {
+    display: grid;
+    grid-template-columns: repeat(3, 34px);
+    grid-template-rows: repeat(2, 30px);
+    gap: 4px;
+    flex: none;
   }
 
-  .dropzone {
-    flex: 1;
-    border: 1px dashed rgba(155, 89, 182, 0.45);
-    background: rgba(155, 89, 182, 0.04);
-    padding: 8px 12px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    min-height: 50px;
-    transition: background-color 0.15s, border-color 0.15s, box-shadow 0.15s;
+  /* small buttons, so shorter corners */
+  .dpad button {
+    --arm: 6px;
+    padding: 0;
+    letter-spacing: 0;
   }
 
-  .dropzone:hover {
-    border-color: rgba(182, 112, 211, 0.75);
+  .dpad button:hover:not(:disabled) {
+    --arm: 9px;
   }
 
-  .dropzone.drag-over {
-    border-color: var(--accent-light);
-    background: rgba(155, 89, 182, 0.16);
-    box-shadow: inset 0 0 22px rgba(155, 89, 182, 0.3);
-  }
+  .dpad .up { grid-area: 1 / 2; }
+  .dpad .left { grid-area: 2 / 1; }
+  .dpad .down { grid-area: 2 / 2; }
+  .dpad .right { grid-area: 2 / 3; }
 
-  .file-input {
-    width: 100%;
-    cursor: pointer;
-    margin: 0 !important;
-    padding: 5px;
-    outline: none;
-    font-size: 0.9em;
-  }
-  
-  .checkbox-row {
-    display: flex;
-    flex-direction: row !important;
-    align-items: center;
-    justify-content: flex-start;
-    margin-top: 10px;
-  }
-  
-  .btn {
-    padding: 10px 16px;
-    width: 180px;
-  }
-
-  .btn-row {
-    justify-content: center;
-    gap: 10px;
-    margin-top: 10px;
-  }
-
-  .btn-small {
-    width: auto;
-    padding: 6px 14px;
-    flex-shrink: 0;
-  }
-
-  .right-panel {
+  .nudge-side {
     display: flex;
     flex-direction: column;
-    align-items: flex-start;
+    gap: 3px;
+    min-width: 0;
+  }
+
+  .info-label {
+    font: 12px "JetBrains Mono", Consolas, monospace;
+    color: rgba(220, 221, 222, 0.55);
+    white-space: nowrap;
+  }
+
+  .hint {
+    font-size: 12px;
+    color: rgba(220, 221, 222, 0.45);
+  }
+
+  .nudge-actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 6px;
+  }
+
+  .nudge-actions button {
+    padding: 4px 14px;
+    font-size: 12px;
   }
 
   .scale-wrapper {
@@ -972,40 +816,12 @@
   .real-base { z-index: 25; }
   .real-top { z-index: 35; }
   .real.stale { visibility: hidden; }
+  /* under the real preview the cropper's own picture would show through
+     transparent parts; it stays there, unseen, for the mouse */
+  .cropper-container.under-real :global(img) { opacity: 0; }
   .dere { z-index: 50; }
   .stats { z-index: 60; }
   
-  .floating-panel {
-    margin-top: 6px;
-    padding: 10px 14px;
-    border: 1px solid rgba(155, 89, 182, 0.3);
-    background: rgba(18, 18, 22, 0.6);
-  }
-
-  .info-label {
-    margin-bottom: 2px;
-    font: 12px "JetBrains Mono", Consolas, monospace;
-    color: rgba(220, 221, 222, 0.55);
-  }
-
-  .dpad {
-    display: flex;
-    justify-content: center;
-    gap: 6px;
-    margin-top: 8px;
-  }
-
-  /* small buttons, so shorter corners */
-  .dpad button {
-    --arm: 6px;
-    padding: 4px 12px;
-    letter-spacing: 0;
-  }
-
-  .dpad button:hover:not(:disabled) {
-    --arm: 9px;
-  }
-
   .upscale-border {
     position: absolute;
     top: 0;
@@ -1063,79 +879,5 @@
     mask-size: 100% 100%;
     -webkit-mask-repeat: no-repeat;
     mask-repeat: no-repeat;
-  }
-
-  @media (max-width: 550px){
-    .selector label {
-    display: flex;
-    flex-direction: column;
-	align-items: center;
-    gap: 5px;
-    white-space: nowrap;
-	}
-
-	.link-row {
-      flex-direction: column;
-      align-items: flex-start;
-      gap: 5px;
-      margin-bottom: 15px;
-    }
-
-    .link-row.checkbox-row {
-      flex-direction: row;
-      align-items: center;
-      gap: 10px;
-    }
-
-    .ltext {
-      flex: 0 0 auto;
-      width: 100%;
-      text-align: center;
-    }
-
-    .checkbox-row .ltext {
-      width: auto;
-    }
-
-    input:not([type="checkbox"]), .dropzone {
-      width: 100% !important;
-    }
-
-    .btn-row {
-      justify-content: center;
-    }
-
-    .form-container {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-    }
-
-    .centered-row {
-      align-items: center;
-    }
-  }
-
-  @media (min-width: 900px) {
-    .app-layout {
-      flex-direction: row;
-      justify-content: center;
-      align-items: flex-start;
-      gap: 15px;
-      margin-top: 5px;
-      padding: 0 20px;
-    }
-
-    .left-panel {
-      width: auto;
-      max-width: 550px;
-      align-items: center;
-    }
-
-    .selector {
-      flex-wrap: nowrap;
-      justify-content: flex-start;
-      margin-bottom: 25px;
-    }
   }
 </style>
