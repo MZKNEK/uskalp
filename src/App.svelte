@@ -1,8 +1,7 @@
 <script>
   import { onMount, tick } from 'svelte';
   import Cropper from "svelte-easy-crop";
-  import logo from '/pwlogo.png'
-  import { getCroppedImg } from './lib/CanvasUtils.js';
+  import { getCroppedImg, cropOnScreen } from './lib/CanvasUtils.js';
 
 
   let borders = [ 'Alpha', 'Beta', 'Gamma', 'Delta', 'Epsilon', 'Zeta', 'Eta', 'Theta', 'Jota', 'Lambda', 'Omega' ]
@@ -28,6 +27,64 @@
   let bgProgress = 0;
   let bgProgressLabel = '';
   let bgAutoLayer = false;
+
+  const year = new Date().getFullYear();
+
+  // the crops in % of the pictures: unlike the pixels they are not rounded
+  let percentCrop = null;
+  let extraPercentCrop = null;
+  let baseCropEl, extraCropEl;
+  // what the croppers show; their own numbers only if the screen has none
+  const baseCrop = () => cropOnScreen(baseCropEl) ?? percentCrop;
+  const topCrop = () => cropOnScreen(extraCropEl) ?? extraPercentCrop;
+  // extra sharpening; without it the scaling keeps the picture as it is
+  let sharpen = 0;
+  const sharpenLevels = [
+    { value: 0, label: 'Brak (wierne skalowanie)' },
+    { value: 0.3, label: 'Lekkie' },
+    { value: 0.6, label: 'Średnie (jak dawniej)' },
+    { value: 1, label: 'Mocne' },
+  ];
+
+  // Real preview: the croppers show the pictures as the browser scales them, so
+  // once a crop stops moving, the scaled and masked layers of the saved file
+  // are put over them
+  let realPreview = true;
+  let basePreview = '';
+  let extraPreview = '';
+  let previewStale = true;
+  let previewTimer;
+  let previewToken = 0;
+
+  function schedulePreview() {
+    previewStale = true;
+    clearTimeout(previewTimer);
+    if (!editMode || !realPreview || !percentCrop) return;
+    previewTimer = setTimeout(updatePreview, 200);
+  }
+
+  async function updatePreview() {
+    const token = ++previewToken;
+    try {
+      const withExtra = hasExtraLayer && extraImage && extraPercentCrop;
+      const [base, extra] = await Promise.all([
+        getCroppedImg(image, baseCrop(), currentMaskUrl, sharpen),
+        withExtra ? getCroppedImg(extraImage, topCrop(), extraMaskUrl, sharpen) : '',
+      ]);
+      if (token !== previewToken) {
+        URL.revokeObjectURL(base);
+        if (extra) URL.revokeObjectURL(extra);
+        return;
+      }
+      if (basePreview) URL.revokeObjectURL(basePreview);
+      if (extraPreview) URL.revokeObjectURL(extraPreview);
+      basePreview = base;
+      extraPreview = extra;
+      previewStale = false;
+    } catch (error) {
+      // the croppers still show the pictures; saving reports the error
+    }
+  }
 
   
   async function syncLayers() {
@@ -158,11 +215,15 @@
 
   function previewCrop(e) {
     pixelCrop = e.detail.pixels;
+    percentCrop = e.detail.percent;
+    schedulePreview();
     isUpscaling = pixelCrop.width < 475 || pixelCrop.height < 667;
   }
 
   function previewExtraCrop(e) {
     extraPixelCrop = e.detail.pixels;
+    extraPercentCrop = e.detail.percent;
+    schedulePreview();
     isExtraUpscaling = extraPixelCrop.width < 475 || extraPixelCrop.height < 667;
   }
 
@@ -335,6 +396,8 @@
 
   $: if (selectedBorder || selectedDere || selectedStyle || Object.keys(variantsMap).length) updateData();
 
+  $: sharpen, realPreview, editMode, image, extraImage, currentMaskUrl, extraMaskUrl, hasExtraLayer, schedulePreview();
+
   function handleKeyDown(e) {
     if (!editMode) return;
     
@@ -411,14 +474,14 @@
       // Normalnie: top jest nad scalp
       let mainImagePart;
       if (editMode) {
-        mainImagePart = await getCroppedImg(image, pixelCrop, currentMaskUrl);
+        mainImagePart = await getCroppedImg(image, baseCrop(), currentMaskUrl, sharpen);
       } else {
         mainImagePart = image;
       }
       const imgMain = await loadImg(mainImagePart);
 
       if (hasExtraLayer && extraImage) {
-        const croppedExtra = await getCroppedImg(extraImage, extraPixelCrop, extraMaskUrl);
+        const croppedExtra = await getCroppedImg(extraImage, topCrop(), extraMaskUrl, sharpen);
         const imgExtra = await loadImg(croppedExtra);
         if (bgAutoLayer) {
           // removeBg: najpierw top (wycięta postać), potem scalp (oryginał z maską) na wierzchu
@@ -459,16 +522,19 @@
   }
 
 </script>
-<main>
+<header class="page-head">
+  <div class="page-top">
+    <a class="back hud-corners" href="https://sanakan.pl/" title="Strona główna">&larr; Sanakan</a>
+  </div>
+  <div class="tag" aria-hidden="true">SAFEGUARD &middot; LV.9<span class="cursor">_</span></div>
+  <h1 class="hud-title">USkalpelator</h1>
+</header>
+
+<main class="content">
 
   <div class="app-layout">
     
     <div class="left-panel">
-      <div class="logo-container">
-        <a href="https://sanakan.pl" target="_blank" rel="noreferrer">
-          <img src={logo} class="logo" alt="Logo" />
-        </a>
-      </div>
 
       <div class="selector">
         <label><div class="stext">Ramka:</div> 
@@ -526,6 +592,18 @@
             <div class="ltext">Tryb edycji:</div>
             <input type="checkbox" bind:checked={editMode} />
           </div>
+        {#if editMode}
+          <div class="link-row">
+            <div class="ltext">Wyostrzenie:</div>
+            <select bind:value={sharpen}>
+              {#each sharpenLevels as level}<option value={level.value}>{level.label}</option>{/each}
+            </select>
+          </div>
+          <div class="link-row checkbox-row" title="Po puszczeniu kadru pokazuje go przeskalowanego dokładnie tak, jak w zapisanym pliku">
+            <div class="ltext">Podgląd wyniku:</div>
+            <input type="checkbox" bind:checked={realPreview} />
+          </div>
+        {/if}
       </div>
 
       {#if editMode && hasExtraLayer}
@@ -538,7 +616,7 @@
           </select>
         </div>
         <div class="link-row btn-row">
-          <button class="btn" style="background: #7c3aed;" on:click={removeBg} disabled={bgRemoving}>
+          <button class="btn btn-ai" on:click={removeBg} disabled={bgRemoving}>
             {bgRemoving ? bgProgressLabel : 'Usuń tło'}
           </button>
         </div>
@@ -548,7 +626,7 @@
           </div>
         {/if}
         {#if !bgRemoving && bgProgressLabel}
-          <div class="bg-status" style="{bgProgressLabel.startsWith('Błąd') ? 'color:#f87171;' : 'color:#22c55e;'}">
+          <div class="bg-status" class:bad={bgProgressLabel.startsWith('Błąd')}>
             {bgProgressLabel.startsWith('Błąd') ? '✗ ' : '✓ '}{bgProgressLabel}
           </div>
         {/if}
@@ -561,7 +639,7 @@
             Skala: {zoomLevel * 100}%
           </button>
           {#if editMode}
-            <button class="btn" style="background: #22c55e;" on:click={downloadImage}>
+            <button class="btn btn-go" on:click={downloadImage}>
               Pobierz obrazek
             </button>
           {/if}
@@ -576,22 +654,22 @@
                   <option value="base">Scalp</option>
                   <option value="both">Obie</option>
                 </select>
-                <button class="btn btn-small" style="background: #555;" on:click={resetZoom}>
+                <button class="btn btn-small btn-muted" on:click={resetZoom}>
                   Reset
                 </button>
                 {#if bgAutoLayer}
-                  <button class="btn btn-small" style="background: #2563eb;" on:click={syncLayers}>
+                  <button class="btn btn-small btn-sync" on:click={syncLayers}>
                     Sync
                   </button>
                 {/if}
               </div>
             {:else}
               <div class="link-row btn-row">
-                <button class="btn btn-small" style="background: #555;" on:click={resetZoom}>
+                <button class="btn btn-small btn-muted" on:click={resetZoom}>
                   Reset
                 </button>
                 {#if bgAutoLayer}
-                  <button class="btn btn-small" style="background: #2563eb;" on:click={syncLayers}>
+                  <button class="btn btn-small btn-sync" on:click={syncLayers}>
                     Sync
                   </button>
                 {/if}
@@ -599,11 +677,11 @@
             {/if}
           {:else}
             <div class="link-row btn-row">
-              <button class="btn btn-small" style="background: #555;" on:click={resetZoom}>
+              <button class="btn btn-small btn-muted" on:click={resetZoom}>
                 Reset
               </button>
               {#if bgAutoLayer}
-                <button class="btn btn-small" style="background: #2563eb;" on:click={syncLayers}>
+                <button class="btn btn-small btn-sync" on:click={syncLayers}>
                   Sync
                 </button>
               {/if}
@@ -631,7 +709,7 @@
     <div class="scale-wrapper" bind:this={wrapperRef} style="width: {475 * finalScale}px; height: {667 * finalScale}px;">
       <div class="looks {editMode ? 'is-editing' : ''}" style="transform: scale({finalScale});">
         {#if editMode && hasExtraLayer && extraImage}
-          <div class="cropper-container top" 
+          <div class="cropper-container top" bind:this={extraCropEl}
               style="--mask-url: url({extraMaskUrl}); pointer-events: {activeLayer === 'base' ? 'none' : 'auto'};">
             <Cropper 
               showGrid={false}
@@ -651,6 +729,9 @@
           {#if isExtraUpscaling}
             <div class="upscale-border"></div>
           {/if}
+          {#if realPreview && extraPreview}
+            <img src={extraPreview} class="real real-top" class:stale={previewStale} alt="" />
+          {/if}
         {/if}
 
           {#if backBorderUri}
@@ -659,7 +740,7 @@
           
           {#if editMode}
             <div class="green-bg" style="-webkit-mask-image: url({currentMaskUrl}); mask-image: url({currentMaskUrl}); -webkit-mask-size: 100% 100%; mask-size: 100% 100%; -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat;"></div>
-            <div class="cropper-container" 
+            <div class="cropper-container" bind:this={baseCropEl}
                 style="--mask-url: url({currentMaskUrl}); pointer-events: {activeLayer === 'extra' ? 'none' : 'auto'};">
               <Cropper 
                 showGrid={false}
@@ -675,6 +756,9 @@
                 restrictPosition={false} 
               />
             </div>
+            {#if realPreview && basePreview}
+              <img src={basePreview} class="real real-base" class:stale={previewStale} alt="" />
+            {/if}
             <div class="crop-border"></div>
             {#if isUpscaling}
               <div class="upscale-border"></div>
@@ -702,20 +786,9 @@
 
 </main>
 
+<footer class="site-foot"><span>&copy; 2017&ndash;{year} Sniku</span><i aria-hidden="true">&middot;</i><a href="https://sanakan.pl/privacy/">Prywatność</a></footer>
+
 <style>
-  .logo-container {
-    width: 100%;
-    display: flex;
-    justify-content: center;
-    margin-bottom: 10px;
-  }
-
-  .logo {
-    height: 6em;
-    will-change: filter;
-    transition: filter 300ms;
-  }
-
   .app-layout {
     display: flex;
     flex-direction: column;
@@ -749,29 +822,35 @@
 
   .stext {
     font-weight: bold;
+    color: #efe2f7;
   }
 
+  /* the loading bar of the Safeguard scanner */
   .bg-progress {
     width: 100%;
     height: 6px;
-    background: rgba(128,128,128,0.2);
-    border-radius: 3px;
+    background: rgba(155, 89, 182, 0.15);
     margin-top: 6px;
     overflow: hidden;
   }
 
   .bg-progress-bar {
     height: 100%;
-    background: #7c3aed;
-    border-radius: 3px;
+    background: var(--accent);
+    box-shadow: 0 0 8px rgba(155, 89, 182, 0.7);
     transition: width 0.3s ease;
   }
 
   .bg-status {
-    font-size: 0.8em;
-    color: #22c55e;
-    text-align: center;
     margin-top: 4px;
+    font: 12px "Share Tech Mono", monospace;
+    letter-spacing: 0.1em;
+    color: var(--ok);
+    text-align: center;
+  }
+
+  .bg-status.bad {
+    color: var(--bad);
   }
 
   .form-container {
@@ -796,17 +875,24 @@
 
   .dropzone {
     flex: 1;
-    border: 1px dashed #3c3c3c;
+    border: 1px dashed rgba(155, 89, 182, 0.45);
+    background: rgba(155, 89, 182, 0.04);
     padding: 8px 12px;
     display: flex;
     align-items: center;
     justify-content: center;
     min-height: 50px;
+    transition: background-color 0.15s, border-color 0.15s, box-shadow 0.15s;
+  }
+
+  .dropzone:hover {
+    border-color: rgba(182, 112, 211, 0.75);
   }
 
   .dropzone.drag-over {
-    border-color: #4CAF50;
-    background: #1e2e1e;
+    border-color: var(--accent-light);
+    background: rgba(155, 89, 182, 0.16);
+    box-shadow: inset 0 0 22px rgba(155, 89, 182, 0.3);
   }
 
   .file-input {
@@ -818,30 +904,17 @@
     font-size: 0.9em;
   }
   
-  .file-input:hover {
-	border-color: #646cff;
-  }
-  
   .checkbox-row {
     display: flex;
     flex-direction: row !important;
-    align-items: flex-start;
+    align-items: center;
     justify-content: flex-start;
     margin-top: 10px;
   }
   
   .btn {
-    padding: 10px 20px;
-    border: none;
-    border-radius: 15px;
-    cursor: pointer;
-    font-weight: bold;
-    transition: background 0.2s;
-    width: 160px;
-  }
-  
-  .btn:hover {
-    background: #646cff;
+    padding: 10px 16px;
+    width: 180px;
   }
 
   .btn-row {
@@ -894,14 +967,43 @@
   .scalp, .cropper-container:not(.top) { z-index: 20; }
   .top, .cropper-container.top { z-index: 30; }
   .border { z-index: 40; }
+  /* the real preview of each layer, right over its cropper; it lets the mouse
+     through and hides while a crop moves */
+  .real-base { z-index: 25; }
+  .real-top { z-index: 35; }
+  .real.stale { visibility: hidden; }
   .dere { z-index: 50; }
   .stats { z-index: 60; }
   
+  .floating-panel {
+    margin-top: 6px;
+    padding: 10px 14px;
+    border: 1px solid rgba(155, 89, 182, 0.3);
+    background: rgba(18, 18, 22, 0.6);
+  }
+
   .info-label {
-    font-size: 0.75em;
-    letter-spacing: 0.05em;
-    color: #aaa;
     margin-bottom: 2px;
+    font: 12px "JetBrains Mono", Consolas, monospace;
+    color: rgba(220, 221, 222, 0.55);
+  }
+
+  .dpad {
+    display: flex;
+    justify-content: center;
+    gap: 6px;
+    margin-top: 8px;
+  }
+
+  /* small buttons, so shorter corners */
+  .dpad button {
+    --arm: 6px;
+    padding: 4px 12px;
+    letter-spacing: 0;
+  }
+
+  .dpad button:hover:not(:disabled) {
+    --arm: 9px;
   }
 
   .upscale-border {
@@ -910,7 +1012,7 @@
     left: 0;
     right: 0;
     bottom: 0;
-    outline: 4px solid #ff6242;
+    outline: 4px solid var(--bad);
     outline-offset: -4px;
     pointer-events: none;
     z-index: 999;
@@ -940,7 +1042,7 @@
     left: 0;
     width: 475px;
     height: 667px;
-    outline: 1px solid rgba(255, 255, 255, 0.5);
+    outline: 1px solid rgba(182, 112, 211, 0.6);
     outline-offset: -1px;
     pointer-events: none;
     z-index: 999;
