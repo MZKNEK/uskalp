@@ -613,17 +613,27 @@ input::placeholder {
   color: #fff;
 }
 
-/* A row of buttons for a short list: all values in view, one click */
+/* A row of buttons for a short list: all values in view, one click. It
+   fills the width of the field, like the lists and link fields: codes and
+   numbers in equal columns, words sharing each row */
 .seg {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(34px, 1fr));
+  gap: 4px;
+}
+
+.seg.words {
   display: flex;
   flex-wrap: wrap;
-  gap: 4px;
+}
+
+.seg.words button {
+  flex: 1 1 auto;
 }
 
 .seg button {
   --arm: 5px;
   --corner: rgba(182, 112, 211, 0.4);
-  min-width: 36px;
   padding: 5px 9px;
   color: rgba(220, 221, 222, 0.65);
   font: 13px/1.5 "Share Tech Mono", monospace;
