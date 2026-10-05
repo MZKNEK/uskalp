@@ -6,10 +6,15 @@
   import Switch from './lib/Switch.svelte';
   import DropZone from './lib/DropZone.svelte';
   import CardDrop from './lib/CardDrop.svelte';
+  import Select from './lib/Select.svelte';
+  import LinkField from './lib/LinkField.svelte';
 
 
   let borders = [ 'Alpha', 'Beta', 'Gamma', 'Delta', 'Epsilon', 'Zeta', 'Eta', 'Theta', 'Jota', 'Lambda', 'Omega' ]
   let deres = [ 'Bodere', 'Dandere', 'Deredere', 'Kamidere', 'Kuudere', 'Mayadere', 'Tsundere', 'Yandere', 'Raito', 'Yami', 'Yato' ]
+
+  // the dere's badge, cut out of the bot's picture of it (32x34 px at 221,628), in a 22 px box
+  const dereIcon = (dere) => `background-image: url(https://raw.githubusercontent.com/MZKNEK/sanakan/master/src/Pictures/PW/${dere}.png); background-size: 307.4px 431.6px; background-position: -142.4px -406.4px;`;
   let variantsMap = {};
   
   let editMode = false;
@@ -518,9 +523,7 @@
       <section class="group">
         <h2 class="group-title"><i>01</i>Karta</h2>
         <div class="field top"><span class="label">Ramka</span><Segmented bind:value={selectedBorder} options={borders} label="Ramka" words /></div>
-        <label class="field"><span class="label">Dere</span><select bind:value={selectedDere}>
-          {#each deres as value}<option {value}>{value}</option>{/each}
-        </select></label>
+        <div class="field"><span class="label">Dere</span><Select bind:value={selectedDere} options={deres} label="Dere" icon={dereIcon} /></div>
         {#if styles}
           <div class="field top"><span class="label">Styl</span><Segmented bind:value={selectedStyle} options={styles} label="Styl ramki" /></div>
         {/if}
@@ -531,7 +534,7 @@
         <h2 class="group-title"><i>02</i>Obraz</h2>
         <DropZone bind:fileName on:file={onFile} accept=".jpg, .jpeg, .png, .webp" />
         {#if !isLocalFile}
-          <label class="field"><span class="label">Link do obrazka</span><input bind:value={image} placeholder="Wklej link do obrazka..." /></label>
+          <div class="field"><span class="label">Link do obrazka</span><LinkField bind:value={image} label="Link do obrazka" placeholder="Wklej link do obrazka..." /></div>
         {/if}
       </section>
 
