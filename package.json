@@ -17,9 +17,8 @@
     "vite": "^5.1.4"
   },
   "dependencies": {
-    "pica": "^9.0.1",
-    "svelte-easy-crop": "^2.0.4",
     "@imgly/background-removal": "1.7.0",
-    "onnxruntime-web": "1.21.0"
+    "onnxruntime-web": "1.21.0",
+    "svelte-easy-crop": "^2.0.4"
   }
 }
