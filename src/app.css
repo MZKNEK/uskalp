@@ -312,16 +312,21 @@ button.btn-go:hover:not(:disabled) {
   padding-top: 5px;
 }
 
+/* on a phone the name goes above the control; a plain block and not a column
+   flexbox, where the auto-fit button rows (.seg) shrank to one column */
 @media (max-width: 480px) {
   .field {
-    flex-direction: column;
-    align-items: stretch;
-    gap: 6px;
+    display: block;
   }
 
   .field > .label {
-    flex: none;
+    display: block;
+    margin-bottom: 6px;
     padding-top: 0;
+  }
+
+  .field > .label:empty {
+    display: none;
   }
 }
 
@@ -618,7 +623,7 @@ input::placeholder {
    numbers in equal columns, words sharing each row */
 .seg {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(34px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(30px, 1fr));
   gap: 4px;
 }
 
